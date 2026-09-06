@@ -12,11 +12,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
   };
 
   let res: { ok: boolean; error?: string } = { ok: true };
-  if (body.action === "approve") res = approveBorrow(id);
-  else if (body.action === "reject") res = rejectBorrow(id, body.reason);
-  else if (body.action === "return") res = returnBorrow(id);
+  if (body.action === "approve") res = await approveBorrow(id);
+  else if (body.action === "reject") res = await rejectBorrow(id, body.reason);
+  else if (body.action === "return") res = await returnBorrow(id);
   else {
-    res = updateBorrow(id, {
+    res = await updateBorrow(id, {
       student: String(body.student ?? ""),
       className: String(body.className ?? ""),
       equipmentId: String(body.equipmentId ?? ""),
@@ -30,6 +30,6 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   const { id } = await params;
-  deleteBorrow(id);
+  await deleteBorrow(id);
   return NextResponse.json({ ok: true });
 }

@@ -21,9 +21,9 @@ npm run dev
 # 打开 http://localhost:3000
 ```
 
-> 当前数据层为**本地 JSON 文件存储**（`.data/db.json`），初始为空台账，
+> 本地开发的数据层为**本地 JSON 文件存储**（`.data/db.json`），初始为空台账，
 > 通过「添加设备」或「导入 CSV」即可建立数据。
-> 页面与 API 均已就绪，接入数据库时只需替换 `lib/store.ts` 内部实现。
+> 部署到 Vercel 并创建 Postgres 数据库后，会自动切换为数据库存储（见第三节）。
 
 常用脚本：
 
@@ -62,24 +62,23 @@ npm start        # 生产模式
 
 ---
 
-## 三、接入 Vercel 数据库（Postgres）—— 第二步改造点
+## 三、接入 Vercel 数据库（Postgres）
 
-界面完成后，把数据持久化到 Vercel Postgres（Neon 托管）：
+代码已内置 `@vercel/postgres` 数据层，并且**首次请求会自动建表**，不需要手动执行 SQL。
+只需两步：
 
-1. 在 Vercel 项目 → Storage 中创建 **Postgres** 数据库；
-2. 在项目 → Settings → Environment Variables 中确认存在 `POSTGRES_URL`（Vercel 会自动注入）；
-3. 本地初始化表结构（表结构已备好，见 `db/init.sql`）：
-   ```bash
-   psql "$POSTGRES_URL" -f db/init.sql
-   ```
-4. 改造 `lib/store.ts`：把其中的 CRUD 函数改为用 `@vercel/postgres` 的 `sql` 标签查询
-   （函数签名与调用方保持不变，页面与 API 无需改动）：
-   ```bash
-   npm i @vercel/postgres
-   ```
-   表名：`equipment` / `borrows` / `print_orders`，字段与现有类型一一对应，见 `db/init.sql`。
+1. 在 Vercel 项目 → **Storage** 中创建 **Postgres** 数据库（Neon 托管，免费档即可），
+   创建时选择关联到本项目，Vercel 会自动注入 `POSTGRES_URL` 等环境变量；
+2. 重新部署一次（Deployments → Redeploy，或推送一个新 commit）。
 
-如需要，可以让我在数据库创建好后直接完成第 4 步的代码切换。
+完成后的行为：
+
+- 线上（存在 `POSTGRES_URL`）→ 自动使用 Postgres，数据持久保存；
+- 本地开发（无 `POSTGRES_URL`）→ 自动回退到本地 JSON 文件（`.data/db.json`），互不影响；
+- 表结构参考 `db/init.sql`（无需手动执行，应用启动时自动创建）。
+
+> 如需在本地直接连接线上数据库调试：在 Vercel 项目的 Settings → Environment Variables
+> 复制 `POSTGRES_URL`，写入项目根目录的 `.env.local`（该文件已被 gitignore），再重启 `npm run dev`。
 
 ---
 
@@ -97,9 +96,9 @@ proxy.ts            登录拦截（未登录重定向至 /login）
 components/         通用 UI（弹窗 / 徽标 / Toast 等）
 lib/
   types.ts          类型与状态机定义（前后端共用）
-  store.ts          数据层（本地 JSON，接入数据库时替换）
+  store.ts          数据层（Vercel Postgres / 本地 JSON 自动切换，自动建表）
   auth.ts           密码哈希校验 + 会话签名
   csv.ts            CSV 解析 / 列映射 / 模板
   api.ts            客户端请求封装
-db/init.sql        Vercel Postgres 表结构
+db/init.sql        Postgres 表结构（仅供参考，应用会自动建表）
 ```

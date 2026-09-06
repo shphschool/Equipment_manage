@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { addPrint, listPrints, type PrintInput } from "@/lib/store";
 
 export async function GET() {
-  return NextResponse.json(listPrints());
+  return NextResponse.json(await listPrints(), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(req: Request) {
@@ -13,7 +15,7 @@ export async function POST(req: Request) {
   const qty = Number(body.quantity);
   if (!qty || qty < 1) return NextResponse.json({ error: "打印数量至少为 1" }, { status: 400 });
 
-  const p = addPrint({
+  const p = await addPrint({
     student: String(body.student),
     className: String(body.className),
     phone: body.phone ? String(body.phone) : undefined,

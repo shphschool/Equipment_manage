@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { addBorrow, listBorrows, type BorrowInput } from "@/lib/store";
 
 export async function GET() {
-  return NextResponse.json(listBorrows());
+  return NextResponse.json(await listBorrows(), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(req: Request) {
@@ -13,7 +15,7 @@ export async function POST(req: Request) {
   const qty = Number(body.quantity);
   if (!qty || qty < 1) return NextResponse.json({ error: "借用数量至少为 1" }, { status: 400 });
 
-  const res = addBorrow({
+  const res = await addBorrow({
     student: String(body.student),
     className: String(body.className),
     equipmentId: String(body.equipmentId),

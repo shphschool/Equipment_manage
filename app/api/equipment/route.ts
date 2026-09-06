@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { addEquipment, listEquipment } from "@/lib/store";
 
 export async function GET() {
-  return NextResponse.json(listEquipment());
+  return NextResponse.json(await listEquipment(), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(req: Request) {
@@ -11,6 +13,6 @@ export async function POST(req: Request) {
   if (!name || !String(name).trim()) {
     return NextResponse.json({ error: "设备名称不能为空" }, { status: 400 });
   }
-  const eq = addEquipment(body);
+  const eq = await addEquipment(body);
   return NextResponse.json(eq, { status: 201 });
 }

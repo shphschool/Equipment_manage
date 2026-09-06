@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const mode = ["update", "skip", "add"].includes(body.mode) ? body.mode : "update";
   if (rows.length === 0) return NextResponse.json({ error: "没有可导入的数据行" }, { status: 400 });
 
-  const existing = new Map(listEquipment().map((e) => [e.name.trim(), e]));
+  const existing = new Map((await listEquipment()).map((e) => [e.name.trim(), e]));
   const addedNames = new Set<string>();
   let added = 0, updated = 0, skipped = 0;
   const issues: string[] = [];
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         issues.push(`${line}与${prev ? "现有" : "本次文件内"}设备重名，已跳过（如需更新请改用「更新同名」模式）`);
         continue;
       }
-      addEquipment(clean);
+      await addEquipment(clean);
       addedNames.add(name);
       added++;
     } else if (prev) {
@@ -49,10 +49,10 @@ export async function POST(req: Request) {
         issues.push(`${line}已存在，已跳过`);
         continue;
       }
-      updateEquipment(prev.id, clean);
+      await updateEquipment(prev.id, clean);
       updated++;
     } else {
-      addEquipment(clean);
+      await addEquipment(clean);
       addedNames.add(name);
       added++;
     }

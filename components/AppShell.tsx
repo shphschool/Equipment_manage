@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               设备管理负责人
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
-              借出与归还自动同步设备库存；当前数据存于本地文件，部署到 Vercel 后可接入 Postgres 数据库。
+              借出与归还自动同步设备库存；本地开发数据存于本地文件，线上自动使用 Vercel Postgres。
             </p>
           </div>
           <button
