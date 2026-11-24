@@ -10,7 +10,7 @@ import {
 } from "@/lib/types";
 import { cx, fmtDateTime, relTime } from "@/lib/utils";
 import {
-  Btn, Badge, Card, CardHeader, Empty, Modal, Field, Input, Select, Textarea,
+  Btn, Badge, Card, Empty, Modal, Field, Input, Select, Textarea,
   ConfirmDialog, type ConfirmState, Th, Td,
 } from "@/components/ui";
 import { useToast } from "@/components/toast";
@@ -32,6 +32,7 @@ export default function PrintsPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load().catch((e) => toast(e.message || "加载失败", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
@@ -258,6 +259,7 @@ function PrintFormModal({ open, onClose, onSaved }: {
   });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) setF({ student: "", className: "", phone: "", content: "", quantity: "1", material: "PLA", note: "" });
   }, [open]);
 
@@ -316,7 +318,7 @@ function PrintFormModal({ open, onClose, onSaved }: {
       </div>
       <p className="mt-3.5 flex items-center gap-1.5 text-xs leading-relaxed text-slate-400">
         <Hammer size={12} className="shrink-0 text-slate-400" />
-        提交后由 3D 打印负责人接单；流程：待接单 → 打印中 → 待交付 → 已交付。
+        提交后由 3D 打印负责人接单；流程：待接单 → 打印中 → 待交付 → 已交付。如需借用 3D 打印机，请前往「学生借用登记」并上传 Bambu Studio 模型文件。
       </p>
     </Modal>
   );
@@ -327,6 +329,7 @@ function RejectModal({ rec, onClose, onSubmit }: {
   rec: PrintOrder | null; onClose: () => void; onSubmit: (reason: string) => Promise<void>;
 }) {
   const [reason, setReason] = useState("");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (rec) setReason(""); }, [rec]);
   return (
     <Modal open={!!rec} onClose={onClose} title="拒绝打印申请" width="max-w-md"

@@ -43,11 +43,18 @@ export function parseCSV(text: string): ParsedCSV {
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "").replace(/[_-]/g, "");
 
 // 支持的列及别名（自动识别中文 / 英文表头）
-export type FieldKey = "name" | "category" | "total" | "inUse" | "loaned" | "available" | "remark";
+export type FieldKey =
+  | "assetNo" | "name" | "spec" | "category" | "assetType"
+  | "unit" | "price" | "total" | "inUse" | "loaned" | "available" | "remark";
 
 const FIELD_ALIASES: Record<FieldKey, string[]> = {
-  name: ["设备名称", "名称", "设备", "物品", "name", "equipment", "device", "item", "equipmentname"],
-  category: ["分类", "类别", "设备分类", "type", "category", "kind"],
+  assetNo: ["固定资产编号", "资产编号", "资产编码", "编号", "assetno", "assetid", "assetcode", "propertyno"],
+  name: ["资产名称", "设备名称", "名称", "设备", "物品", "name", "equipment", "device", "item", "equipmentname"],
+  spec: ["规格型号", "规格", "型号", "spec", "model", "specification"],
+  category: ["分类", "类别", "设备分类", "category", "kind"],
+  assetType: ["资产类型", "资产类别", "类型", "assettype"],
+  unit: ["单位", "unit"],
+  price: ["单价", "价格", "金额", "price", "unitprice"],
   total: ["总数", "总数量", "数量", "总数(台)", "total", "count", "qty", "quantity", "all", "sum"],
   inUse: ["在用", "使用中", "在用数", "占用", "inuse", "inuse数量"],
   loaned: ["借出", "已借出", "借出数", "外借", "loan", "loaned", "lend", "borrowed", "out"],
@@ -56,8 +63,13 @@ const FIELD_ALIASES: Record<FieldKey, string[]> = {
 };
 
 export const FIELD_LABELS: Record<FieldKey, string> = {
+  assetNo: "资产编号",
   name: "设备名称",
+  spec: "规格型号",
   category: "分类",
+  assetType: "资产类型",
+  unit: "单位",
+  price: "单价",
   total: "总数",
   inUse: "在用",
   loaned: "借出",
@@ -86,8 +98,13 @@ export function detectMapping(headers: string[]): ColumnMap[] {
 }
 
 export interface ImportRow {
+  assetNo?: string;
   name: string;
+  spec?: string;
   category?: string;
+  assetType?: "fixed" | "low";
+  unit?: string;
+  price?: number;
   total?: number;
   inUse?: number;
   loaned?: number;
@@ -102,6 +119,14 @@ const toInt = (s: string): number | undefined => {
   const n = Number(t.replace(/[^\d.-]/g, ""));
   if (isNaN(n)) return undefined;
   return Math.max(0, Math.floor(n));
+};
+
+const toFloat = (s: string): number | undefined => {
+  const t = s.trim().replace(/[，,]/g, "").replace(/[^\d.-]/g, "");
+  if (t === "") return undefined;
+  const n = Number(t);
+  if (isNaN(n)) return undefined;
+  return Math.max(0, n);
 };
 
 const clean = (s: string) => s.trim().replace(/^["']|["']$/g, "");
@@ -173,8 +198,19 @@ export function normalizeRow(
     inUse,
     loaned,
   };
+  const assetNo = get("assetNo");
+  if (assetNo) row.assetNo = assetNo;
+  const spec = get("spec");
+  if (spec) row.spec = spec;
   const category = get("category");
   if (category) row.category = category;
+  const assetType = get("assetType");
+  if (/低值|low|易耗/i.test(assetType)) row.assetType = "low";
+  else if (/固定|fixed/i.test(assetType)) row.assetType = "fixed";
+  const unit = get("unit");
+  if (unit) row.unit = unit;
+  const price = toFloat(get("price"));
+  if (price !== undefined) row.price = price;
   const remark = get("remark");
   if (remark) row.remark = remark;
   return { row };
@@ -191,10 +227,9 @@ export function downloadTextFile(name: string, content: string, mime = "text/pla
 }
 
 /** 空模板 */
-export const TEMPLATE_CSV = `设备名称,分类,总数,在用,借出,剩余数量,备注
-佳能数码相机 EOS 850D,摄影器材,10,3,2,5,含镜头套装
-iPad 第10代,电子设备,15,8,4,3,需登记序列号
-3D打印笔,创客工具,20,2,3,15,
-激光测距仪,测量工具,5,1,0,4,仅限室外使用`;
+export const TEMPLATE_CSV = `资产编号,设备名称,规格型号,分类,资产类型,单位,单价,总数,在用,借出,剩余数量,备注
+PHGD/DZ-5-2026-034,FDM 打印机,Bambu Lab P2S,3D 打印,固定资产,台,3699,1,0,0,1,
+PHGD/DZ-9-2026-001,曲线锯,曲线锯,手动工具,低值物资,套,520,1,0,0,1,
+,示波器,,测量仪器,固定资产,台,2599,2,0,0,2,无资产编号时按名称去重`;
 
 export const SAMPLE_CSV = TEMPLATE_CSV;

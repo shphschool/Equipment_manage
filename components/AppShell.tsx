@@ -9,13 +9,13 @@ import { api } from "@/lib/api";
 
 const nav = [
   { href: "/equipment", label: "设备管理", icon: Boxes },
-  { href: "/borrows", label: "借用登记", icon: ClipboardList },
+  { href: "/borrows", label: "学生借用登记", icon: ClipboardList },
   { href: "/prints", label: "3D 打印服务", icon: Printer },
 ];
 
 const pageMeta: Record<string, { title: string; desc: string }> = {
-  "/equipment": { title: "设备管理", desc: "设备台账、CSV 导入与维护" },
-  "/borrows": { title: "学生借用登记", desc: "申请、审批与归还管理" },
+  "/equipment": { title: "设备管理", desc: "固定资产 / 低值物资台账、编号与维护" },
+  "/borrows": { title: "学生借用登记", desc: "固定资产借用登记：3D 打印上传模型文件，其它设备填写使用时间段" },
   "/prints": { title: "3D 打印服务", desc: "打印工单与交付管理" },
 };
 
@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               设备管理负责人
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
-              借出与归还自动同步设备库存；本地开发数据存于本地文件，线上自动使用 Vercel Postgres。
+              学生借用登记面向固定资产；3D 打印机借用需上传模型文件，其它设备需填写使用时间段。
             </p>
           </div>
           <button

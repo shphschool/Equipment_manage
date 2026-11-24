@@ -26,8 +26,13 @@ function ensureSchema() {
     schemaReady = sql`
       CREATE TABLE IF NOT EXISTS equipment (
         id          TEXT PRIMARY KEY,
+        asset_no    TEXT NOT NULL DEFAULT '',
         name        TEXT NOT NULL,
+        spec        TEXT NOT NULL DEFAULT '',
         category    TEXT NOT NULL DEFAULT '未分类',
+        asset_type  TEXT NOT NULL DEFAULT 'fixed',
+        unit        TEXT NOT NULL DEFAULT '件',
+        price       NUMERIC(12,2) NOT NULL DEFAULT 0,
         total       INTEGER NOT NULL DEFAULT 0,
         in_use      INTEGER NOT NULL DEFAULT 0,
         loaned      INTEGER NOT NULL DEFAULT 0,
@@ -35,6 +40,12 @@ function ensureSchema() {
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       )`
+      .then(() => sql`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS asset_no TEXT NOT NULL DEFAULT ''`)
+      .then(() => sql`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS spec TEXT NOT NULL DEFAULT ''`)
+      .then(() => sql`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS asset_type TEXT NOT NULL DEFAULT 'fixed'`)
+      .then(() => sql`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT '件'`)
+      .then(() => sql`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS price NUMERIC(12,2) NOT NULL DEFAULT 0`)
+      .then(() => sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_equipment_asset_no ON equipment (asset_no) WHERE asset_no <> ''`)
       .then(() => sql`
         CREATE TABLE IF NOT EXISTS borrows (
           id             TEXT PRIMARY KEY,
@@ -77,7 +88,14 @@ const iso = (v: unknown): string =>
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function rowToEq(r: any): Equipment {
   return {
-    id: r.id, name: r.name, category: r.category,
+    id: r.id,
+    assetNo: r.asset_no ?? "",
+    name: r.name,
+    spec: r.spec ?? "",
+    category: r.category,
+    assetType: r.asset_type === "low" ? "low" : "fixed",
+    unit: r.unit || "件",
+    price: Number(r.price ?? 0),
     total: r.total, inUse: r.in_use, loaned: r.loaned,
     remark: r.remark ?? "",
     createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
@@ -112,10 +130,17 @@ function rowToPrint(r: any): PrintOrder {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+/** 固定资产在前，其次按资产编号自然排序 */
+function sortEq(a: Equipment, b: Equipment): number {
+  if (a.assetType !== b.assetType) return a.assetType === "fixed" ? -1 : 1;
+  const byNo = a.assetNo.localeCompare(b.assetNo, "en", { numeric: true });
+  return byNo !== 0 ? byNo : a.name.localeCompare(b.name, "zh");
+}
+
 async function pgListEquipment(): Promise<Equipment[]> {
   await ensureSchema();
   const { rows } = await sql`SELECT * FROM equipment`;
-  return rows.map(rowToEq).sort((a, b) => a.name.localeCompare(b.name, "zh"));
+  return rows.map(rowToEq).sort(sortEq);
 }
 
 async function pgGetEquipment(id: string): Promise<Equipment | undefined> {
@@ -125,8 +150,13 @@ async function pgGetEquipment(id: string): Promise<Equipment | undefined> {
 }
 
 export interface EquipmentInput {
+  assetNo?: string;
   name: string;
+  spec?: string;
   category?: string;
+  assetType?: "fixed" | "low";
+  unit?: string;
+  price?: number;
   total?: number;
   inUse?: number;
   loaned?: number;
@@ -142,32 +172,43 @@ function mergeEq(existing: Equipment, input: EquipmentInput): Equipment {
   loaned = Math.min(loaned, Math.max(0, total - inUse));
   return {
     ...existing,
-    name: (input.name ?? existing.name).trim(),
-    category: (input.category ?? existing.category).trim() || "未分类",
+    assetNo: String(input.assetNo ?? existing.assetNo).trim(),
+    name: String(input.name ?? existing.name).trim(),
+    spec: String(input.spec ?? existing.spec).trim(),
+    category: String(input.category ?? existing.category).trim() || "未分类",
+    assetType: input.assetType === "low" ? "low" : input.assetType === "fixed" ? "fixed" : existing.assetType,
+    unit: String(input.unit ?? existing.unit).trim() || "件",
+    price: input.price !== undefined ? Math.max(0, Number(input.price) || 0) : existing.price,
     total,
     inUse,
     loaned,
-    remark: (input.remark ?? existing.remark).trim(),
+    remark: String(input.remark ?? existing.remark).trim(),
     updatedAt: nowISO(),
   };
 }
 
 async function pgUpsertEq(eq: Equipment): Promise<void> {
   await sql`
-    UPDATE equipment SET name = ${eq.name}, category = ${eq.category}, total = ${eq.total},
-      in_use = ${eq.inUse}, loaned = ${eq.loaned}, remark = ${eq.remark}, updated_at = ${eq.updatedAt}
+    UPDATE equipment SET asset_no = ${eq.assetNo}, name = ${eq.name}, spec = ${eq.spec},
+      category = ${eq.category}, asset_type = ${eq.assetType}, unit = ${eq.unit}, price = ${eq.price},
+      total = ${eq.total}, in_use = ${eq.inUse}, loaned = ${eq.loaned}, remark = ${eq.remark},
+      updated_at = ${eq.updatedAt}
     WHERE id = ${eq.id}`;
 }
 
 async function pgAddEquipment(input: EquipmentInput): Promise<Equipment> {
   await ensureSchema();
   const eq = mergeEq(
-    { id: uid(), name: "", category: "未分类", total: 0, inUse: 0, loaned: 0, remark: "", createdAt: nowISO(), updatedAt: nowISO() },
+    {
+      id: uid(), assetNo: "", name: "", spec: "", category: "未分类", assetType: "fixed",
+      unit: "件", price: 0, total: 0, inUse: 0, loaned: 0, remark: "",
+      createdAt: nowISO(), updatedAt: nowISO(),
+    },
     input
   );
   await sql`
-    INSERT INTO equipment (id, name, category, total, in_use, loaned, remark, created_at, updated_at)
-    VALUES (${eq.id}, ${eq.name}, ${eq.category}, ${eq.total}, ${eq.inUse}, ${eq.loaned}, ${eq.remark}, ${eq.createdAt}, ${eq.updatedAt})`;
+    INSERT INTO equipment (id, asset_no, name, spec, category, asset_type, unit, price, total, in_use, loaned, remark, created_at, updated_at)
+    VALUES (${eq.id}, ${eq.assetNo}, ${eq.name}, ${eq.spec}, ${eq.category}, ${eq.assetType}, ${eq.unit}, ${eq.price}, ${eq.total}, ${eq.inUse}, ${eq.loaned}, ${eq.remark}, ${eq.createdAt}, ${eq.updatedAt})`;
   return eq;
 }
 
@@ -391,7 +432,20 @@ const DB_FILE = path.join(process.cwd(), ".data", "db.json");
 let cache: DBShape | null = null;
 
 function emptyDB(): DBShape {
-  return { version: 1, equipment: [], borrows: [], prints: [] };
+  return { version: 2, equipment: [], borrows: [], prints: [] };
+}
+
+/** 兼容早期本地 JSON（缺少资产编号等新字段） */
+function hydrateEq(e: Equipment): Equipment {
+  return {
+    ...e,
+    assetNo: e.assetNo ?? "",
+    spec: e.spec ?? "",
+    category: e.category || "未分类",
+    assetType: e.assetType === "low" ? "low" : "fixed",
+    unit: e.unit || "件",
+    price: Number(e.price ?? 0),
+  };
 }
 
 function load(): DBShape {
@@ -399,7 +453,13 @@ function load(): DBShape {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-      cache = { ...raw };
+      cache = {
+        ...emptyDB(),
+        ...raw,
+        equipment: Array.isArray(raw.equipment) ? raw.equipment.map(hydrateEq) : [],
+        borrows: Array.isArray(raw.borrows) ? raw.borrows : [],
+        prints: Array.isArray(raw.prints) ? raw.prints : [],
+      };
       return cache!;
     }
   } catch {
@@ -428,7 +488,7 @@ function mutate<T>(fn: (db: DBShape) => T): T {
 }
 
 function jListEquipment(): Equipment[] {
-  return [...load().equipment].sort((a, b) => a.name.localeCompare(b.name, "zh"));
+  return [...load().equipment].sort(sortEq);
 }
 
 function jGetEquipment(id: string): Equipment | undefined {
@@ -437,7 +497,11 @@ function jGetEquipment(id: string): Equipment | undefined {
 
 function jAddEquipment(input: EquipmentInput): Equipment {
   const eq = mergeEq(
-    { id: uid(), name: "", category: "未分类", total: 0, inUse: 0, loaned: 0, remark: "", createdAt: nowISO(), updatedAt: nowISO() },
+    {
+      id: uid(), assetNo: "", name: "", spec: "", category: "未分类", assetType: "fixed",
+      unit: "件", price: 0, total: 0, inUse: 0, loaned: 0, remark: "",
+      createdAt: nowISO(), updatedAt: nowISO(),
+    },
     input
   );
   mutate((db) => {
@@ -654,6 +718,10 @@ function jGetStats() {
 
 export function listEquipment(): Promise<Equipment[]> {
   return usePg ? pgListEquipment() : Promise.resolve(jListEquipment());
+}
+
+export function getEquipment(id: string): Promise<Equipment | undefined> {
+  return usePg ? pgGetEquipment(id) : Promise.resolve(jGetEquipment(id));
 }
 
 export function addEquipment(input: EquipmentInput): Promise<Equipment> {

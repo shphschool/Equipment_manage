@@ -9,9 +9,14 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { name } = body as { name?: string };
+  const { name, assetNo } = body as { name?: string; assetNo?: string };
   if (!name || !String(name).trim()) {
     return NextResponse.json({ error: "设备名称不能为空" }, { status: 400 });
+  }
+  const no = String(assetNo ?? "").trim();
+  if (no) {
+    const exists = (await listEquipment()).some((e) => e.assetNo === no);
+    if (exists) return NextResponse.json({ error: `资产编号「${no}」已存在` }, { status: 400 });
   }
   const eq = await addEquipment(body);
   return NextResponse.json(eq, { status: 201 });

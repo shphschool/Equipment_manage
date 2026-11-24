@@ -72,7 +72,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-[11.5px] text-slate-500">
-          登录后可管理设备台账、借用登记与 3D 打印服务
+          登录后可管理设备台账、学生借用登记与 3D 打印服务
         </p>
       </div>
     </div>

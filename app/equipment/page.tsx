@@ -1,17 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Upload, Search, Pencil, Trash2, FileSpreadsheet,
   Boxes, Package, CircleDot, PackageCheck, AlertTriangle, CheckCircle2, FileUp, X,
+  CalendarClock,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
-  toView, type Equipment, type EquipmentView, type EqStatusKey, eqStatusMeta,
+  toView, assetTypeMeta, type AssetType, type Equipment, type EquipmentView, type EqStatusKey, eqStatusMeta,
 } from "@/lib/types";
 import { cx } from "@/lib/utils";
 import {
-  Btn, Badge, Card, CardHeader, Empty, Modal, Field, Input, Select, ConfirmDialog,
+  Btn, Badge, Card, Empty, Modal, Field, Input, Select, ConfirmDialog,
   type ConfirmState, Th, Td,
 } from "@/components/ui";
 import { useToast } from "@/components/toast";
@@ -21,12 +23,14 @@ import {
 } from "@/lib/csv";
 
 type TabKey = "all" | EqStatusKey;
+type TypeKey = "all" | AssetType;
 
 export default function EquipmentPage() {
   const toast = useToast();
   const [items, setItems] = useState<EquipmentView[] | null>(null);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+  const [atype, setAtype] = useState<TypeKey>("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<EquipmentView | null>(null);
@@ -40,9 +44,9 @@ export default function EquipmentPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load().catch((e) => toast(e.message || "加载失败", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load]);
+  }, [load, toast]);
 
   const cats = useMemo(() => {
     const s = new Set((items ?? []).map((e) => e.category));
@@ -65,10 +69,11 @@ export default function EquipmentPage() {
     return (items ?? []).filter((e) => {
       if (tab !== "all" && e.statusKey !== tab) return false;
       if (cat !== "all" && e.category !== cat) return false;
-      if (kw && !`${e.name} ${e.category} ${e.remark}`.toLowerCase().includes(kw)) return false;
+      if (atype !== "all" && e.assetType !== atype) return false;
+      if (kw && !`${e.assetNo} ${e.name} ${e.spec} ${e.category} ${e.remark}`.toLowerCase().includes(kw)) return false;
       return true;
     });
-  }, [items, q, cat, tab]);
+  }, [items, q, cat, atype, tab]);
 
   const sum = useMemo(() => filtered.reduce(
     (s, e) => ({
@@ -98,10 +103,10 @@ export default function EquipmentPage() {
       {/* 汇总条 */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          { label: "当前列表设备总数", value: sum.total, icon: Boxes, cls: "text-slate-900" },
+          { label: "当前列表资产总数", value: sum.total, icon: Boxes, cls: "text-slate-900" },
           { label: "在用", value: sum.inUse, icon: Package, cls: "text-sky-600" },
           { label: "借出", value: sum.loaned, icon: CircleDot, cls: "text-amber-600" },
-          { label: "剩余（可借）", value: sum.avail, icon: PackageCheck, cls: "text-emerald-600" },
+          { label: "剩余（可用）", value: sum.avail, icon: PackageCheck, cls: "text-emerald-600" },
         ].map((c) => (
           <div key={c.label} className="flex items-center gap-4 rounded-2xl border border-slate-200/70 bg-white px-5 py-5 shadow-sm">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 text-slate-400"><c.icon size={19} /></span>
@@ -118,11 +123,20 @@ export default function EquipmentPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input placeholder="搜索名称 / 分类 / 备注…" value={q} onChange={(e) => setQ(e.target.value)} className="h-10 pl-9 text-[13px]" />
+            <Input placeholder="搜索资产编号 / 名称 / 规格…" value={q} onChange={(e) => setQ(e.target.value)} className="h-10 pl-9 text-[13px]" />
           </div>
-          <Select value={cat} onChange={(e) => setCat(e.target.value)} className="h-10 w-40 text-[13px]">
-            {cats.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </Select>
+          <div className="w-32 shrink-0">
+            <Select value={atype} onChange={(e) => setAtype(e.target.value as TypeKey)} className="h-10 text-[13px]">
+              <option value="all">全部类型</option>
+              <option value="fixed">固定资产</option>
+              <option value="low">低值物资</option>
+            </Select>
+          </div>
+          <div className="w-40 shrink-0">
+            <Select value={cat} onChange={(e) => setCat(e.target.value)} className="h-10 text-[13px]">
+              {cats.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </Select>
+          </div>
           <div className="ml-auto flex items-center gap-2.5">
             <Btn variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>导入 CSV</Btn>
             <Btn size="sm" icon={<Plus size={14} />} onClick={openAdd}>添加设备</Btn>
@@ -131,7 +145,7 @@ export default function EquipmentPage() {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <FilterTabsLocal tab={tab} setTab={setTab} counts={counts} />
           <span className="ml-auto hidden items-center gap-1 text-[11.5px] text-slate-400 sm:flex">
-            {items ? `共 ${items.length} 种设备` : ""}
+            {items ? `共 ${items.length} 件资产` : ""}
           </span>
         </div>
       </Card>
@@ -139,10 +153,11 @@ export default function EquipmentPage() {
       {/* 设备表 */}
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px]">
+          <table className="w-full min-w-[1040px]">
             <thead className="bg-slate-50/80">
               <tr>
-                <Th>设备</Th>
+                <Th>资产编号</Th>
+                <Th>资产</Th>
                 <Th className="text-center">总数</Th>
                 <Th className="text-center">在用</Th>
                 <Th className="text-center">借出</Th>
@@ -154,14 +169,20 @@ export default function EquipmentPage() {
             <tbody className="divide-y divide-slate-100">
               {filtered.map((e) => {
                 const meta = eqStatusMeta[e.statusKey];
+                const typeMeta = assetTypeMeta[e.assetType];
                 const low = e.total > 0 && e.available === 0;
                 return (
                   <tr key={e.id} className={cx("group transition hover:bg-indigo-50/30", low && "bg-rose-50/40 hover:bg-rose-50/60")}>
                     <Td>
+                      <p className="whitespace-nowrap font-mono text-[11px] font-medium text-violet-600">{e.assetNo || "—"}</p>
+                      <div className="mt-1"><Badge meta={typeMeta} /></div>
+                    </Td>
+                    <Td>
                       <p className="text-[13.5px] font-semibold text-slate-800">{e.name}</p>
                       <p className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-slate-400">
-                        <span className="rounded-md bg-violet-50 px-1.5 py-px font-medium text-violet-600">{e.category}</span>
-                        {e.remark && <span className="max-w-[200px] truncate" title={e.remark}>{e.remark}</span>}
+                        <span className="rounded-md bg-slate-100 px-1.5 py-px font-medium text-slate-500">{e.category}</span>
+                        {e.spec && <span className="max-w-[220px] truncate" title={e.spec}>{e.spec}</span>}
+                        {e.remark && <span className="max-w-[160px] truncate" title={e.remark}>· {e.remark}</span>}
                       </p>
                     </Td>
                     <Td className="tnum text-center text-sm font-semibold text-slate-800">{e.total}</Td>
@@ -174,10 +195,16 @@ export default function EquipmentPage() {
                     <Td><Badge meta={meta} /></Td>
                     <Td className="text-right">
                       <div className="flex justify-end gap-1 opacity-60 transition group-hover:opacity-100">
+                        {e.assetType === "fixed" && (
+                          <Link href={`/borrows?equipment=${e.id}`}
+                            className="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600" title="借用登记">
+                            <CalendarClock size={15} />
+                          </Link>
+                        )}
                         <button title="编辑" onClick={() => openEdit(e)} className="rounded-lg p-2 text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
                         <button title="删除" onClick={() => { setPendingDelete(e); setConfirm({
                           title: "删除设备", danger: true, yesText: "删除",
-                          msg: <>确定删除 <b className="text-slate-800">「{e.name}」</b> 吗？若有未归还的借出记录将无法删除。</>,
+                          msg: <>确定删除 <b className="text-slate-800">「{e.name}」</b>（{e.assetNo || "无编号"}）吗？若有未归还的借出记录将无法删除。</>,
                         }); }} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
                       </div>
                     </Td>
@@ -193,7 +220,7 @@ export default function EquipmentPage() {
         </div>
         {items && items.length > 0 && (
           <div className="border-t border-slate-100 px-5 py-3">
-            <p className="text-[11.5px] text-slate-400">筛选结果 {filtered.length} / {items.length} 种 · 借出数量由借用审批自动增减</p>
+            <p className="text-[11.5px] text-slate-400">筛选结果 {filtered.length} / {items.length} 件 · 借出数量由借用审批自动增减 · 固定资产可登记借用</p>
           </div>
         )}
       </Card>
@@ -211,7 +238,7 @@ export default function EquipmentPage() {
       <ImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        existing={(items ?? []).map((e) => e.name)}
+        existing={(items ?? []).map((e) => ({ name: e.name, assetNo: e.assetNo }))}
         onDone={async () => { await load(); }}
       />
 
@@ -267,20 +294,28 @@ function EquipFormModal({ open, edit, onClose, onSaved, categories }: {
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ name: "", category: "", total: "", inUse: "", loaned: "", remark: "" });
+  const [f, setF] = useState({
+    assetNo: "", name: "", spec: "", category: "", assetType: "fixed" as AssetType,
+    unit: "件", price: "", total: "", inUse: "", loaned: "", remark: "",
+  });
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setF({
+        assetNo: edit?.assetNo ?? "",
         name: edit?.name ?? "",
+        spec: edit?.spec ?? "",
         category: edit?.category ?? "",
+        assetType: edit?.assetType ?? "fixed",
+        unit: edit?.unit ?? "件",
+        price: String(edit?.price ?? ""),
         total: String(edit?.total ?? ""),
         inUse: String(edit?.inUse ?? "0"),
         loaned: String(edit?.loaned ?? "0"),
         remark: edit?.remark ?? "",
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, edit]);
 
   const n = (s: string) => (s === "" ? 0 : Math.max(0, Math.floor(Number(s) || 0)));
@@ -293,7 +328,11 @@ function EquipFormModal({ open, edit, onClose, onSaved, categories }: {
   const save = async () => {
     setSaving(true);
     try {
-      const payload = { name, category: f.category, total, inUse, loaned, remark: f.remark };
+      const payload = {
+        assetNo: f.assetNo, name, spec: f.spec, category: f.category, assetType: f.assetType,
+        unit: f.unit, price: Math.max(0, Number(f.price) || 0),
+        total, inUse, loaned, remark: f.remark,
+      };
       if (edit) await api.patch(`/api/equipment/${edit.id}`, payload);
       else await api.post("/api/equipment", payload);
       toast(edit ? "设备信息已更新" : "设备已添加", "success");
@@ -316,11 +355,29 @@ function EquipFormModal({ open, edit, onClose, onSaved, categories }: {
       }>
       <div className="grid grid-cols-2 gap-4">
         <Field label="设备名称" required className="col-span-2">
-          <Input value={f.name} placeholder="如：佳能数码相机 EOS 850D" onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <Input value={f.name} placeholder="如：FDM 打印机" onChange={(e) => setF({ ...f, name: e.target.value })} />
+        </Field>
+        <Field label="资产编号" hint="原编号 / 新编号">
+          <Input value={f.assetNo} placeholder="如：PHGD/DZ-5-2026-034" onChange={(e) => setF({ ...f, assetNo: e.target.value })} />
+        </Field>
+        <Field label="资产类型">
+          <Select value={f.assetType} onChange={(e) => setF({ ...f, assetType: e.target.value as AssetType })}>
+            <option value="fixed">固定资产</option>
+            <option value="low">低值物资</option>
+          </Select>
+        </Field>
+        <Field label="规格型号" className="col-span-2">
+          <Input value={f.spec} placeholder="如：Bambu Lab P2S" onChange={(e) => setF({ ...f, spec: e.target.value })} />
         </Field>
         <Field label="分类" hint="可输入新分类">
-          <Input list="eq-cats" value={f.category} placeholder="如：摄影器材" onChange={(e) => setF({ ...f, category: e.target.value })} />
+          <Input list="eq-cats" value={f.category} placeholder="如：3D 打印" onChange={(e) => setF({ ...f, category: e.target.value })} />
           <datalist id="eq-cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+        </Field>
+        <Field label="单位">
+          <Input value={f.unit} placeholder="台 / 套 / 个" onChange={(e) => setF({ ...f, unit: e.target.value })} />
+        </Field>
+        <Field label="单价（元）">
+          <Input type="number" min={0} step="0.01" value={f.price} placeholder="0" onChange={(e) => setF({ ...f, price: e.target.value })} />
         </Field>
         <Field label="总数" required>
           <Input type="number" min={0} value={f.total} onChange={(e) => setF({ ...f, total: e.target.value })} placeholder="0" />
@@ -355,7 +412,7 @@ function EquipFormModal({ open, edit, onClose, onSaved, categories }: {
 function ImportModal({ open, onClose, existing, onDone }: {
   open: boolean;
   onClose: () => void;
-  existing: string[];
+  existing: { name: string; assetNo: string }[];
   onDone: () => Promise<void>;
 }) {
   const toast = useToast();
@@ -372,6 +429,7 @@ function ImportModal({ open, onClose, existing, onDone }: {
 
   useEffect(() => {
     if (!open) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
       setParsed(null); setNormRows([]); setInvalid([]); setFileName(""); setResult(null); setMode("update");
     }
   }, [open]);
@@ -412,9 +470,11 @@ function ImportModal({ open, onClose, existing, onDone }: {
     reader.readAsText(file);
   };
 
-  const matchedFields = mapping.filter((m) => m.field);
   const conflictCount = useMemo(
-    () => normRows.filter((r) => existing.includes(r.name ?? "")).length,
+    () => normRows.filter((r) => r.assetNo
+      ? existing.some((e) => e.assetNo === r.assetNo)
+      : existing.some((e) => e.name === r.name)
+    ).length,
     [normRows, existing]
   );
 
@@ -434,7 +494,9 @@ function ImportModal({ open, onClose, existing, onDone }: {
   };
 
   const fieldLabel = (f: string | null) =>
-    f === "name" ? "设备名称*" : f === "category" ? "分类" : f === "total" ? "总数" :
+    f === "assetNo" ? "资产编号" : f === "name" ? "设备名称*" : f === "spec" ? "规格型号" :
+    f === "category" ? "分类" : f === "assetType" ? "资产类型" : f === "unit" ? "单位" :
+    f === "price" ? "单价" : f === "total" ? "总数" :
     f === "inUse" ? "在用" : f === "loaned" ? "借出" : f === "available" ? "剩余数量" : "备注";
 
   return (
@@ -459,7 +521,7 @@ function ImportModal({ open, onClose, existing, onDone }: {
                   <FileUp size={22} />
                 </span>
                 <p className="text-sm font-medium text-slate-700">点击选择或拖拽 CSV 文件到此处</p>
-                <p className="text-xs text-slate-400">表头支持中文 / 英文列名，自动识别：名称 · 分类 · 总数 · 在用 · 借出 · 剩余数量 · 备注</p>
+                <p className="text-xs text-slate-400">表头支持中文 / 英文列名，自动识别：资产编号 · 名称 · 规格型号 · 分类 · 类型 · 单位 · 单价 · 总数 · 剩余数量 · 备注</p>
                 <button
                   onClick={(e) => { e.stopPropagation(); downloadTextFile("设备台账模板.csv", TEMPLATE_CSV, "text/csv;charset=utf-8"); }}
                   className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
@@ -470,7 +532,7 @@ function ImportModal({ open, onClose, existing, onDone }: {
               </div>
               <p className="flex items-center gap-1.5 text-xs text-slate-400">
                 <AlertTriangle size={12} className="shrink-0 text-amber-500" />
-                每行一件设备；重复导入同名设备时按下方策略处理；借出数量与借用系统联动，请勿手工乱填。
+                每行一件资产；有资产编号按编号去重，无编号按名称去重；借出数量与借用系统联动，请勿手工乱填。
               </p>
             </>
           ) : (
@@ -508,10 +570,10 @@ function ImportModal({ open, onClose, existing, onDone }: {
               {normRows.length > 0 && (
                 <>
                   <div className="max-h-52 overflow-auto rounded-xl border border-slate-200">
-                    <table className="w-full min-w-[560px] text-left">
+                    <table className="w-full min-w-[620px] text-left">
                       <thead className="sticky top-0 bg-slate-100 text-[11px] uppercase tracking-wide text-slate-500">
                         <tr>
-                          {["设备名称", "分类", "总数", "在用", "借出", "剩余(推算)"].map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}
+                          {["资产编号", "设备名称", "规格型号", "分类 / 类型", "总数", "剩余(推算)"].map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white text-xs text-slate-600">
@@ -519,11 +581,14 @@ function ImportModal({ open, onClose, existing, onDone }: {
                           const t = r.total ?? 0, iu = r.inUse ?? 0, lo = r.loaned ?? 0;
                           return (
                             <tr key={i}>
+                              <td className="whitespace-nowrap px-3 py-2 font-mono text-[10.5px] text-violet-600">{r.assetNo ?? "—"}</td>
                               <td className="px-3 py-2 font-medium text-slate-800">{r.name}</td>
-                              <td className="px-3 py-2">{r.category ?? "—"}</td>
+                              <td className="max-w-[180px] truncate px-3 py-2 text-slate-500" title={r.spec}>{r.spec ?? "—"}</td>
+                              <td className="px-3 py-2">
+                                <span className="text-slate-600">{r.category ?? "—"}</span>
+                                <span className="ml-1 rounded bg-slate-100 px-1 py-px text-[10px] text-slate-500">{r.assetType === "low" ? "低值" : "固定"}</span>
+                              </td>
                               <td className="tnum px-3 py-2">{t}</td>
-                              <td className="tnum px-3 py-2">{iu}</td>
-                              <td className="tnum px-3 py-2">{lo}</td>
                               <td className="tnum px-3 py-2 font-semibold text-emerald-600">{Math.max(0, t - iu - lo)}</td>
                             </tr>
                           );
@@ -537,8 +602,8 @@ function ImportModal({ open, onClose, existing, onDone }: {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium text-slate-500">同名设备处理：</span>
                     {([
-                      { k: "update" as const, label: "更新同名（合并字段）" },
-                      { k: "skip" as const, label: "跳过同名" },
+                      { k: "update" as const, label: "更新同编号 / 名称（合并字段）" },
+                      { k: "skip" as const, label: "跳过同编号 / 名称" },
                       { k: "add" as const, label: "全部新增" },
                     ]).map((o) => (
                       <button key={o.k} onClick={() => setMode(o.k)}
